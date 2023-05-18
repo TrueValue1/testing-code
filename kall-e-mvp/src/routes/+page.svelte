@@ -4,18 +4,13 @@
 	import { SSE } from 'sse.js'
 
 	let query: string = ''
-	let answer: string = ''
 	let loading: boolean = false
 	let chatMessages: ChatCompletionRequestMessage[] = []
 	let scrollToDiv: HTMLDivElement
 
-	function scrollToBottom() {
-		setTimeout(function () {
-			scrollToDiv.scrollIntoView({ behavior: 'smooth', block: 'end', inline: 'nearest' })
-		}, 100)
-	}
+	const handleSubmit = async (): Promise<void> => {
+		if (!query) return // Prevent empty queries from being sent
 
-	const handleSubmit = async () => {
 		loading = true
 		chatMessages = [...chatMessages, { role: 'user', content: query }]
 
@@ -29,36 +24,39 @@
 		query = ''
 
 		eventSource.addEventListener('error', handleError)
-
-		eventSource.addEventListener('message', (e) => {
-			scrollToBottom()
-			try {
-				loading = false
-				if (e.data === '[DONE]') {
-					chatMessages = [...chatMessages, { role: 'assistant', content: answer }]
-					answer = ''
-					return
-				}
-
-				const completionResponse = JSON.parse(e.data)
-				const [{ delta }] = completionResponse.choices
-
-				if (delta.content) {
-					answer = (answer ?? '') + delta.content
-				}
-			} catch (err) {
-				handleError(err)
-			}
-		})
+		eventSource.addEventListener('message', handleChatResponse)
 		eventSource.stream()
-		scrollToBottom()
 	}
 
-	function handleError<T>(err: T) {
+	function handleChatResponse(e: MessageEvent): void {
+		scrollToBottom()
+
+		loading = false
+		if (e.data === '[DONE]') {
+			chatMessages = [...chatMessages, { role: 'assistant', content: e.data }]
+			return
+		}
+
+		try {
+			const completionResponse = JSON.parse(e.data)
+			const [{ delta }] = completionResponse.choices
+
+			if (delta.content) {
+				chatMessages = [...chatMessages, { role: 'assistant', content: delta.content }]
+			}
+		} catch (err) {
+			handleError(err)
+		}
+	}
+
+	function handleError<T>(err: T): void {
 		loading = false
 		query = ''
-		answer = ''
 		console.error(err)
+	}
+
+	function scrollToBottom(): void {
+		scrollToDiv.scrollIntoView({ behavior: 'smooth', block: 'end', inline: 'nearest' })
 	}
 </script>
 
